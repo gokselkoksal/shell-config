@@ -29,9 +29,11 @@ done
 [[ -n "$pushed_sha" ]] || exit 0
 
 # sync.sh reads this checkout's files, not the commit being pushed. Pushed from
-# another branch's worktree, or with uncommitted edits, it would install those
-# instead — and remove any synced helper missing from them.
-if [[ "$(git rev-parse HEAD)" != "$pushed_sha" || -n "$(git status --porcelain)" ]]; then
+# another branch's worktree, or with uncommitted edits to what sync reads, it
+# would install those instead — and remove any synced helper missing from them.
+# Only zsh/, config/ and sync.sh matter: a stray file elsewhere must not stop
+# the sync.
+if [[ "$(git rev-parse HEAD)" != "$pushed_sha" || -n "$(git status --porcelain -- zsh config sync.sh)" ]]; then
   echo "[pre-push] WARNING: this checkout is not the $default_branch commit being pushed, or has uncommitted changes; not syncing. Run sync.sh from a clean $default_branch checkout." >&2
   exit 0
 fi

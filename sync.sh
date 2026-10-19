@@ -128,16 +128,13 @@ install_file() {
 # never touched, which is what makes deleting without a prompt safe, including
 # from a git hook. check_files has already ruled out overwriting one.
 sync_files() {
-  local managed name target
+  local name target renamed
 
   mkdir -p "$CUSTOM_DIR"
 
-  # check_files already warned about any invalid entries.
-  managed="$(read_manifest 2>/dev/null)"
-
   # Claim every repo file before copying any. A run that dies part-way then still
   # owns what it added, rather than the next run calling it a clash.
-  write_manifest "$(printf '%s\n%s\n' "$managed" "$REPO_FILES" | awk 'NF && !seen[$0]++')"
+  write_manifest "$(printf '%s\n%s\n' "$MANAGED" "$REPO_FILES" | awk 'NF && !seen[$0]++')"
 
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
@@ -149,13 +146,19 @@ sync_files() {
     [[ -n "$name" ]] || continue
     grep -Fxq -- "$name" <<< "$REPO_FILES" && continue
     target="$CUSTOM_DIR/$name"
+    # Renamed only in case: on a case-insensitive filesystem the old name is the
+    # copy just made under the new one, so it is only forgotten.
+    renamed="$(grep -Fix -- "$name" <<< "$REPO_FILES" | head -n 1 || true)"
+    if [[ -n "$renamed" && -e "$target" && "$target" -ef "$CUSTOM_DIR/$renamed" ]]; then
+      continue
+    fi
     if [[ -L "$target" ]]; then
       warn "$target is now a symlink, not ours to remove; forgetting $name"
     elif [[ -e "$target" ]]; then
       rm -f "$target"
       log "Removed $target (no longer in $ZSH_SRC)"
     fi
-  done <<< "$managed"
+  done <<< "$MANAGED"
 
   # Only now, with the removals done, drop them from the manifest. A run that dies
   # before this still owns them and removes them next time.
@@ -191,13 +194,13 @@ problem() {
   grep -Fxq -- "  $*" <<< "$PROBLEMS" || PROBLEMS+="  $*"$'\n'
 }
 
-# A symlink to a directory is followed; anything else at $1, or at a folder above
-# it up to $HOME, cannot hold files, and writing under it would fail part-way
-# through the run.
+# A symlink to a directory is followed; anything else at $1, or at any folder
+# above it, cannot hold files, and writing under it would fail part-way through
+# the run.
 check_dir() {
   local dir="$1"
 
-  while [[ "$dir" == "$HOME"/* ]]; do
+  while [[ "$dir" != / && -n "$dir" ]]; do
     if [[ -L "$dir" && ! -e "$dir" ]]; then
       problem "$dir is a symlink to nothing"
       return 1
@@ -220,18 +223,40 @@ check_custom_dir() {
   fi
 }
 
+# Prints the manifest entry that names the same file as $1, if any: an exact
+# match, or on a case-insensitive filesystem a match in another case.
+managed_as() {
+  local name="$1" other
+  if grep -Fxq -- "$name" <<< "$MANAGED"; then
+    printf '%s\n' "$name"
+    return 0
+  fi
+  while IFS= read -r other; do
+    [[ -n "$other" ]] || continue
+    # tr, not ${var,,}: bash 3.2 has no case conversion.
+    if [[ "$(tr '[:upper:]' '[:lower:]' <<< "$other")" == "$(tr '[:upper:]' '[:lower:]' <<< "$name")" ]]; then
+      if [[ -e "$CUSTOM_DIR/$other" && "$CUSTOM_DIR/$other" -ef "$CUSTOM_DIR/$name" ]]; then
+        printf '%s\n' "$other"
+        return 0
+      fi
+    fi
+  done <<< "$MANAGED"
+  return 1
+}
+
 # A repo file whose name is taken by something sync never copied is a clash, and
-# sync refuses to overwrite it.
+# sync refuses to overwrite it. A managed file that has stopped being a regular
+# file, whether it is still in the repo or about to be removed, is refused too:
+# both would fail after other files had been written.
 check_files() {
-  local managed name target
+  local name target
 
   check_dir "$CUSTOM_DIR" || return 0
 
-  managed="$(read_manifest)"
   while IFS= read -r name; do
     [[ -n "$name" ]] || continue
     target="$CUSTOM_DIR/$name"
-    if grep -Fxq -- "$name" <<< "$managed"; then
+    if managed_as "$name" >/dev/null; then
       if [[ -L "$target" ]]; then
         problem "$target is recorded as synced but is now a symlink"
       elif [[ -e "$target" && ! -f "$target" ]]; then
@@ -241,6 +266,16 @@ check_files() {
       problem "$target exists but sync did not put it there; move it away (it is probably the hand-copied version of this helper) or rename the file in this repo"
     fi
   done <<< "$REPO_FILES"
+
+  # Recorded, gone from the repo, and no longer something rm -f removes.
+  while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    grep -Fxq -- "$name" <<< "$REPO_FILES" && continue
+    target="$CUSTOM_DIR/$name"
+    if [[ -e "$target" && ! -L "$target" && ! -f "$target" ]]; then
+      problem "$target is recorded as synced and has left the repo, but is no longer a regular file; remove it by hand"
+    fi
+  done <<< "$MANAGED"
 }
 
 check_examples() {
@@ -263,6 +298,7 @@ check_examples() {
 
 REPO_FILES="$(repo_files)"
 REPO_EXAMPLES="$(repo_examples)"
+MANAGED="$(read_manifest)"
 
 if [[ -z "$REPO_FILES" ]]; then
   echo "Error: no *.zsh files in $ZSH_SRC" >&2

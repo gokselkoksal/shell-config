@@ -59,7 +59,7 @@ fi
 if command -v security >/dev/null 2>&1; then
   log "Optional command present: security"
 else
-  warn "optional command 'security' not found — add-password, get-password and delete-password need the macOS keychain"
+  warn "optional command 'security' not found — secret needs the macOS keychain"
 fi
 
 [[ -f "$SYNC" ]] || fail "$SYNC not found — is this a complete checkout?"
@@ -79,12 +79,20 @@ if [[ -n "$git_common" ]] \
   IS_WORKTREE=true
 fi
 
+# Where git will actually look. With core.hooksPath set this is somewhere else,
+# usually a directory shared by every repo, where a hook that runs this repo's
+# sync.sh does not belong.
+hooks_path="$(git -C "$SRC_DIR" rev-parse --git-path hooks 2>/dev/null || true)"
+hooks_path="$(cd "$SRC_DIR" && cd "$(dirname "$hooks_path")" 2>/dev/null && pwd -P)/$(basename "$hooks_path")"
+
 if [[ -z "$git_common" ]]; then
   warn "$SRC_DIR is not a git checkout — skipping hooks"
 elif ! git_common="$(cd "$SRC_DIR" && cd "$git_common" 2>/dev/null && pwd -P)"; then
   warn "could not resolve the git dir — skipping hooks"
 elif [[ ! -d "$git_common/hooks" ]]; then
   warn "$git_common has no hooks directory — skipping hooks"
+elif [[ "$hooks_path" != "$git_common/hooks" ]]; then
+  warn "core.hooksPath points git at $hooks_path, so hooks in $git_common/hooks would never run — not installing. Unset it for this repo, or add a call to $SYNC to your own hooks."
 else
   if $IS_WORKTREE; then
     log "Linked worktree: hooks are shared, installing into $git_common/hooks"

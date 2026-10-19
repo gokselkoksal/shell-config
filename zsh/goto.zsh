@@ -4,31 +4,64 @@
 #   goto <name>   - cd to its directory
 #
 # Names and directories come from goto.conf in the shell-config conf dir — see
-# shell-config.zsh for where that is and the file's format. For example:
+# 00-shell-config.zsh for where that is and the file's format. For example:
 #
 #   docs   ~/Documents
 #   repos  $HOME/Development/Repos
+#
+# Every entry is also a zsh named directory, so ~docs and ~repos/koin work in any
+# command, with zsh's own completion. Those are set when this file loads and
+# refreshed on every goto call, so a conf edit reaches them without a new shell.
+# A name has to be a valid identifier (letters, digits, _) to become one; other
+# names still work with goto.
+
+# Defines ~name for each entry of goto.conf.
+_goto_hash_dirs() {
+    local name value
+    _shell_config_entries goto 2>/dev/null | while IFS=$'\t' read -r name value; do
+        [[ "$name" =~ '^[A-Za-z_][A-Za-z0-9_]*$' ]] || continue
+        hash -d "$name=$value"
+    done
+}
 
 goto() {
+    _goto_hash_dirs
+
+    if [[ "$1" == -h || "$1" == --help ]]; then
+        print -r -- "Usage: goto [<name>]"
+        print
+        print -r -- "  goto          list the names"
+        print -r -- "  goto <name>   cd to its directory; ~<name> works in any command too"
+        return 0
+    fi
+
     if [[ -z "$1" ]]; then
-        echo "Usage: goto <location>"
         _shell_config_list goto locations
-        return 1
+        return 0
     fi
 
     local directory
-    if ! directory="$(_shell_config_lookup goto "$1")"; then
-        echo "Unknown location: $1" >&2
-        return 1
-    fi
+    _shell_config_lookup goto "$1" >/dev/null
+    case $? in
+        2)
+            local conf
+            conf="$(_shell_config_file goto)"
+            _shell_config_error goto "no locations configured: create $conf (see $conf.example)"
+            return
+            ;;
+        1)
+            _shell_config_error goto "unknown location '$1'; run goto for the list"
+            return
+            ;;
+    esac
+    directory="$(_shell_config_lookup goto "$1")"
 
     if [[ ! -d "$directory" ]]; then
-        echo "Directory for '$1' does not exist: $directory" >&2
-        return 1
+        _shell_config_error goto "directory for '$1' does not exist: $directory"
+        return
     fi
 
-    cd "$directory" || return 1
-    echo "Changed to $directory"
+    cd "$directory"
 }
 
 _goto_complete() {
@@ -37,3 +70,5 @@ _goto_complete() {
 if (( $+functions[compdef] )); then
     compdef _goto_complete goto
 fi
+
+_goto_hash_dirs

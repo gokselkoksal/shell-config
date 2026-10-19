@@ -20,9 +20,11 @@ default_branch="${default_branch#origin/}"
 current="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
 [[ "$current" == "$default_branch" ]] || exit 0
 
-# Uncommitted edits carried through the pull would be synced as if published, and
-# an uncommitted helper removal would remove its synced copy.
-if [[ -n "$(git status --porcelain)" ]]; then
+# Uncommitted edits to what sync reads, carried through the pull, would be synced
+# as if published, and an uncommitted helper removal would remove its synced
+# copy. Only zsh/, config/ and sync.sh matter: a stray file elsewhere must not
+# stop the sync.
+if [[ -n "$(git status --porcelain -- zsh config sync.sh)" ]]; then
   echo "[post-merge] WARNING: uncommitted changes in this checkout; not syncing. Run sync.sh once they are committed or stashed." >&2
   exit 0
 fi
