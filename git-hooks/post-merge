@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# managed by bootstrap.sh — do not edit .git/hooks/post-merge directly;
+# edit git-hooks/post-merge in the repo and re-run ./bootstrap.sh
+#
+# Syncs the zsh helpers into oh-my-zsh's custom dir after a pull that lands on
+# the default branch — the same trigger as pre-push, seen from the receiving end.
+# A pull on any other branch, in any worktree, does nothing: that content is not
+# published yet.
+#
+# Runs non-interactively: it never prompts, and removes only files sync itself copied.
+
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+
+default_branch="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+default_branch="${default_branch#origin/}"
+[[ -n "$default_branch" ]] || default_branch=main
+
+current="$(git symbolic-ref --short HEAD 2>/dev/null || true)"
+[[ "$current" == "$default_branch" ]] || exit 0
+
+# Uncommitted edits carried through the pull would be synced as if published, and
+# an uncommitted helper removal would remove its synced copy.
+if [[ -n "$(git status --porcelain)" ]]; then
+  echo "[post-merge] WARNING: uncommitted changes in this checkout; not syncing. Run sync.sh once they are committed or stashed." >&2
+  exit 0
+fi
+
+exec "$repo_root/sync.sh"

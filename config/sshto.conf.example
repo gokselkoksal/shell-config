@@ -1,0 +1,8 @@
+# sshto hosts: one per line, a name, whitespace, then what to hand to ssh —
+# user@host, or a Host alias from ~/.ssh/config. Lines starting with # are skipped.
+#
+# Copy this file to sshto.conf beside it and edit that. sync.sh rewrites this
+# .example file on every run and never touches sshto.conf.
+
+studio  me@studio-mac-mini
+box     devbox

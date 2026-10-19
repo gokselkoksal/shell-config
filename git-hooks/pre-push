@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# managed by bootstrap.sh — do not edit .git/hooks/pre-push directly;
+# edit git-hooks/pre-push in the repo and re-run ./bootstrap.sh
+#
+# Syncs the zsh helpers into oh-my-zsh's custom dir when the default branch is
+# pushed — publishing on main is what makes a change real, so that is what
+# installs it. Pushing any other branch does nothing.
+#
+# Runs non-interactively: it never prompts, and removes only files sync itself copied.
+
+set -uo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+zero="$(git hash-object --stdin </dev/null | tr '[:xdigit:]' '0')"
+
+default_branch="$(git symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null || true)"
+default_branch="${default_branch#origin/}"
+[[ -n "$default_branch" ]] || default_branch=main
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref being
+# pushed. Must be drained whether or not it matches, or the push sees a broken pipe.
+pushed_sha=""
+while read -r _local_ref local_sha remote_ref _remote_sha; do
+  [[ "$remote_ref" == "refs/heads/$default_branch" ]] || continue
+  [[ "$local_sha" == "$zero" ]] && continue   # branch deletion, not a publish
+  pushed_sha="$local_sha"
+done
+
+[[ -n "$pushed_sha" ]] || exit 0
+
+# sync.sh reads this checkout's files, not the commit being pushed. Pushed from
+# another branch's worktree, or with uncommitted edits, it would install those
+# instead — and remove any synced helper missing from them.
+if [[ "$(git rev-parse HEAD)" != "$pushed_sha" || -n "$(git status --porcelain)" ]]; then
+  echo "[pre-push] WARNING: this checkout is not the $default_branch commit being pushed, or has uncommitted changes; not syncing. Run sync.sh from a clean $default_branch checkout." >&2
+  exit 0
+fi
+
+echo "[pre-push] $default_branch is being pushed — syncing shell helpers"
+
+# Never block the push: a sync failure is a local problem, and the commits being
+# pushed are already sound.
+if ! "$repo_root/sync.sh"; then
+  echo "[pre-push] WARNING: sync.sh failed; run it by hand. Push continues." >&2
+fi
+
+exit 0
