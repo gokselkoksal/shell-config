@@ -28,8 +28,8 @@ sshto() {
 }
 
 _sshto_complete() {
-    local -a names
-    names=(${(f)"$(_shell_config_names sshto 2>/dev/null)"})
-    compadd -a names
+    _shell_config_describe sshto host
 }
-(( $+functions[compdef] )) && compdef _sshto_complete sshto
+if (( $+functions[compdef] )); then
+    compdef _sshto_complete sshto
+fi

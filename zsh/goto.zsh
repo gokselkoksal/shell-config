@@ -22,13 +22,18 @@ goto() {
         return 1
     fi
 
+    if [[ ! -d "$directory" ]]; then
+        echo "Directory for '$1' does not exist: $directory" >&2
+        return 1
+    fi
+
     cd "$directory" || return 1
     echo "Changed to $directory"
 }
 
 _goto_complete() {
-    local -a names
-    names=(${(f)"$(_shell_config_names goto 2>/dev/null)"})
-    compadd -a names
+    _shell_config_describe goto location
 }
-(( $+functions[compdef] )) && compdef _goto_complete goto
+if (( $+functions[compdef] )); then
+    compdef _goto_complete goto
+fi

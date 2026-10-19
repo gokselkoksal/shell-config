@@ -44,11 +44,22 @@ else
   warn "no oh-my-zsh at $(dirname "$custom_dir") — install it, or set ZSH_CUSTOM to a directory your shell loads, before running sync.sh"
 fi
 
-# xc wraps xcrun; everything else needs nothing.
+# Not required by the repo itself — checked so a helper that quietly degrades
+# without one does not do it as a surprise.
 if command -v xcrun >/dev/null 2>&1; then
   log "Optional command present: xcrun"
 else
   warn "optional command 'xcrun' not found — xc will not work on this machine"
+fi
+if command -v jq >/dev/null 2>&1; then
+  log "Optional command present: jq"
+else
+  warn "optional command 'jq' not found — 'xc sim shake' cannot list simulators to pick from (brew install jq)"
+fi
+if command -v security >/dev/null 2>&1; then
+  log "Optional command present: security"
+else
+  warn "optional command 'security' not found — add-password, get-password and delete-password need the macOS keychain"
 fi
 
 [[ -f "$SYNC" ]] || fail "$SYNC not found — is this a complete checkout?"

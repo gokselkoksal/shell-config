@@ -66,19 +66,40 @@ _shell_config_lookup() {
     return 1
 }
 
-# Prints the "Available …" list for helper $1, or where to configure it when its
-# conf file is missing or empty. $2 is the word for an entry ("locations").
+# Prints the "Available …" list for helper $1 as "name -> value" lines, or where
+# to configure it when its conf file is missing or empty. $2 is the word for the
+# entries ("locations").
 _shell_config_list() {
-    local conf
-    local -a names
+    local conf name value width=0
+    local -a names values
     conf="$(_shell_config_file "$1")"
-    names=(${(f)"$(_shell_config_names "$1")"})
+    _shell_config_entries "$1" | while IFS=$'\t' read -r name value; do
+        names+=("$name")
+        values+=("$value")
+        (( ${#name} > width )) && width=${#name}
+    done
     if [[ ! -f "$conf" ]]; then
         print -r -- "No $2 configured: create $conf (see $conf.example)."
     elif (( ${#names} == 0 )); then
         print -r -- "No $2 configured: $conf has no entries (see $conf.example)."
     else
         print -r -- "Available $2:"
-        print -rl -- "${names[@]/#/  }"
+        local i
+        for (( i = 1; i <= ${#names}; i++ )); do
+            printf '  %-*s -> %s\n' "$width" "${names[i]}" "${values[i]}"
+        done
     fi
+}
+
+# Completion for helper $1: offers each name with its value as the description.
+# $2 is the word for one entry ("location"). For use inside a completer only,
+# since _describe exists only once compinit has run.
+_shell_config_describe() {
+    local name value
+    local -a entries
+    _shell_config_entries "$1" 2>/dev/null | while IFS=$'\t' read -r name value; do
+        # _describe splits on the first unescaped colon.
+        entries+=("${name//:/\\:}:${value}")
+    done
+    _describe "$2" entries
 }

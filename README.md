@@ -6,9 +6,13 @@ Source of truth for my zsh helpers (`zsh/`). `sync.sh` copies them into oh-my-zs
 
 | Helper | Does | Configured by |
 | --- | --- | --- |
-| `goto <name>` | `cd` to a directory by name, with completion | `goto.conf` |
-| `sshto <name>` | `ssh` to a host by name, with completion | `sshto.conf` |
-| `xc <noun> <verb>` | Xcode helpers (`xc sim shake`), `xc sim …` passes through to `xcrun simctl` | nothing |
+| `goto <name>` | `cd` to a directory by name; completion shows the paths | `goto.conf` |
+| `sshto <name>` | `ssh` to a host by name; completion shows the targets | `sshto.conf` |
+| `xc …` | Xcode: `clean spm\|derived\|all`, `sim shake`, `open`, `version`; `xc sim …` passes through to `xcrun simctl` | nothing |
+| `add-password`, `get-password`, `delete-password` | generic passwords in the macOS keychain, for `$USER` | nothing |
+| `download-gif <url> [name]` | save a GIF to `$XDG_DOWNLOAD_DIR` or `~/Downloads` | nothing |
+
+Run any of them without arguments for usage.
 
 The helpers hold no paths or hosts. Those live in per-machine conf files that are never
 committed and never written by sync, so the same files work on every machine.
@@ -35,8 +39,9 @@ cp sshto.conf.example sshto.conf
 ```
 
 Two steps because they answer different questions. `bootstrap.sh` prepares the
-*checkout*: it checks that `git` and `zsh` are present, says where sync will write, and
-installs the git hooks. It copies nothing into your home directory — `sync.sh` does
+*checkout*: it checks that `git` and `zsh` are present (and names optional tools like
+`jq` that a helper degrades without), says where sync will write, and installs the git
+hooks. It copies nothing into your home directory — `sync.sh` does
 that, and on a fresh clone you run it once by hand.
 
 `bootstrap.sh` is idempotent: re-run it any time, and after pulling a change to
@@ -52,6 +57,14 @@ them away first, and move their hardcoded lists into the conf files:
 mkdir -p ~/shell-config-old
 mv ~/.oh-my-zsh/custom/{goto,sshto,xc}.zsh ~/shell-config-old/   # or delete them
 ```
+
+Earlier versions of some helpers were oh-my-zsh plugins (`custom/plugins/goto/`,
+`custom/plugins/password-management/`, `custom/plugins/utils/`), enabled through
+`plugins=(…)` in `.zshrc`. Sync does not touch `plugins/`, so those keep loading — and
+oh-my-zsh loads `custom/*.zsh` after plugins, so the synced copies win, with their own
+listing format and the conf file instead of `GOTO_DIRS`. Remove the plugin folders and
+their `plugins=(…)` entries once the synced ones work; `goto`'s `GOTO_DIRS` entries go
+into `goto.conf`.
 
 ### Worktrees
 
@@ -182,6 +195,6 @@ never removed.
    `_shell_config_names` and `_shell_config_list` from `shell-config.zsh`, at call time.
 2. If it has values, add `config/<name>.conf.example` with placeholder entries — the
    repo is public.
-3. Guard `compdef` with `(( $+functions[compdef] ))` so the file also loads where
-   `compinit` has not run.
+3. Register completion only `if (( $+functions[compdef] ))`, so the file also loads,
+   without an error status, where `compinit` has not run.
 4. `./sync.sh`, open a new shell.
